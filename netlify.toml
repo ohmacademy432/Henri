@@ -1,0 +1,32 @@
+[build]
+  command  = "npm run build"
+  publish  = "dist"
+
+# SPA routing — every unknown path falls back to index.html so React Router can handle it.
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+
+# Cache the service worker briefly, immutable assets aggressively.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/sw-push.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options    = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy    = "strict-origin-when-cross-origin"
