@@ -1,22 +1,30 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '../components/Button';
 import { Card } from '../components/Card';
-import { FAB } from '../components/FAB';
 import { QuickActions } from '../components/QuickActions';
+import { RemindMeButton } from '../components/RemindMeButton';
 import { SectionLabel } from '../components/SectionLabel';
 import { LogSheets } from '../components/LogSheets';
+import { addToCalendar, type CalendarEventInput } from '../lib/calendar';
 import { useBook } from '../lib/book';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
+  fetchFeedsSince,
   fetchLastDiaper,
   fetchLastFeed,
   fetchLastSleep,
   fetchSleepSessionsSince,
 } from '../lib/repo';
 import type { Diaper, Feed, SleepSession } from '../lib/types';
-import { mockBaby, mockLastEntries, mockPrediction } from '../lib/mock';
+import { mockBaby, mockLastEntries } from '../lib/mock';
 import { editorialAgeLabel, editorialDate, greeting, relativeTime } from '../lib/utils/age';
-import { predictNextNap } from '../lib/utils/predictions';
+import {
+  formatClock,
+  formatClockRange,
+  predictNextFeed,
+  predictNextNap,
+} from '../lib/utils/predictions';
 
 export function Today() {
   const nav = useNavigate();
@@ -28,22 +36,25 @@ export function Today() {
   const [lastSleep, setLastSleep] = useState<SleepSession | null>(null);
   const [lastDiaper, setLastDiaper] = useState<Diaper | null>(null);
   const [sleepLastWeek, setSleepLastWeek] = useState<SleepSession[]>([]);
+  const [feedsLastWeek, setFeedsLastWeek] = useState<Feed[]>([]);
 
   const usingMock = !isSupabaseConfigured || !baby;
 
   const refresh = useCallback(async () => {
     if (usingMock || !baby) return;
     const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
-    const [f, s, d, week] = await Promise.all([
+    const [f, s, d, weekSleep, weekFeeds] = await Promise.all([
       fetchLastFeed(baby.id),
       fetchLastSleep(baby.id),
       fetchLastDiaper(baby.id),
       fetchSleepSessionsSince(baby.id, since),
+      fetchFeedsSince(baby.id, since),
     ]);
     setLastFeed(f);
     setLastSleep(s);
     setLastDiaper(d);
-    setSleepLastWeek(week);
+    setSleepLastWeek(weekSleep);
+    setFeedsLastWeek(weekFeeds);
   }, [usingMock, baby]);
 
   useEffect(() => {
@@ -75,9 +86,10 @@ export function Today() {
       ? mapDiaperForCard(lastDiaper)
       : null;
 
-  const prediction = usingMock
-    ? mockPrediction
-    : predictNextNap(sleepLastWeek, now);
+  const napPrediction  = usingMock ? null : predictNextNap(sleepLastWeek, now);
+  const feedPrediction = usingMock ? null : predictNextFeed(feedsLastWeek, now);
+  const hasAnyPrediction =
+    !!(napPrediction?.windowStart && napPrediction?.windowEnd) || !!feedPrediction?.nextAt;
 
   return (
     <div className="page">
@@ -181,39 +193,40 @@ export function Today() {
             {diaperCard ? <LastCard kind="diaper" entry={diaperCard} /> : <EmptyCard kind="diaper" onLog={() => setLogKind('diaper')} />}
           </div>
 
-          <SectionLabel>a gentle prediction</SectionLabel>
+          {hasAnyPrediction && (
+            <>
+              <SectionLabel>a gentle prediction</SectionLabel>
 
-          <Card tone="parchment" bordered style={{ padding: 22, borderColor: 'var(--gold)' }}>
-            <div className="eyebrow" style={{ color: 'var(--gold-deep)', marginBottom: 8 }}>
-              {prediction.label}
-            </div>
-            <div
-              style={{
-                fontFamily: 'var(--font-serif)',
-                fontSize: 40,
-                lineHeight: 1,
-                color: 'var(--ink)',
-                letterSpacing: '-0.005em',
-              }}
-            >
-              {prediction.time ?? '—'}
-            </div>
-            <div
-              style={{
-                fontFamily: 'var(--font-serif)',
-                fontStyle: 'italic',
-                fontSize: 15,
-                color: 'var(--ink-soft)',
-                marginTop: 6,
-              }}
-            >
-              {prediction.confidence}
-            </div>
-          </Card>
+              <Card tone="parchment" bordered style={{ padding: 22, borderColor: 'var(--gold)' }}>
+                {napPrediction?.windowStart && napPrediction?.windowEnd && (
+                  <NapBlock
+                    start={napPrediction.windowStart}
+                    end={napPrediction.windowEnd}
+                    confidence={napPrediction.confidence}
+                    babyName={displayBaby.name}
+                  />
+                )}
+                {feedPrediction?.nextAt && (
+                  <FeedBlock
+                    when={feedPrediction.nextAt}
+                    confidence={feedPrediction.confidence}
+                    spaced={!!napPrediction?.windowStart}
+                  />
+                )}
+              </Card>
+            </>
+          )}
         </>
       )}
 
-      <FAB onClick={() => setQaOpen(true)} label="Add an entry" />
+      {!awaitingArrival && (
+        <div style={{ marginTop: 28 }}>
+          <Button size="lg" block onClick={() => setQaOpen(true)}>
+            Add an entry
+          </Button>
+        </div>
+      )}
+
       <QuickActions
         open={qaOpen}
         onClose={() => setQaOpen(false)}
@@ -240,7 +253,7 @@ export function Today() {
   );
 }
 
-type CardEntry = { when: Date; primary: string; secondary?: string };
+type CardEntry = { when: Date; primary: string; secondary?: string; footer?: React.ReactNode };
 
 function LastCard({ kind, entry }: { kind: 'feed' | 'sleep' | 'diaper'; entry: CardEntry }) {
   const label = kind === 'feed' ? 'last feed' : kind === 'sleep' ? 'last sleep' : 'last diaper';
@@ -274,7 +287,103 @@ function LastCard({ kind, entry }: { kind: 'feed' | 'sleep' | 'diaper'; entry: C
           {entry.secondary}
         </div>
       )}
+      {entry.footer && <div style={{ marginTop: 10 }}>{entry.footer}</div>}
     </Card>
+  );
+}
+
+function NapBlock({
+  start,
+  end,
+  confidence,
+  babyName,
+}: {
+  start: Date;
+  end: Date;
+  confidence: string;
+  babyName: string;
+}) {
+  return (
+    <div>
+      <div className="eyebrow" style={{ color: 'var(--gold-deep)', marginBottom: 6 }}>
+        Next likely nap
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-serif)',
+          fontStyle: 'italic',
+          fontSize: 22,
+          lineHeight: 1.25,
+          color: 'var(--ink)',
+        }}
+      >
+        {babyName} usually settles between{' '}
+        <span style={{ fontStyle: 'normal', fontWeight: 500 }}>{formatClockRange(start, end)}</span>.
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-serif)',
+          fontStyle: 'italic',
+          fontSize: 14,
+          color: 'var(--ink-mute)',
+          marginTop: 4,
+        }}
+      >
+        {confidence}
+      </div>
+    </div>
+  );
+}
+
+function FeedBlock({
+  when,
+  confidence,
+  spaced,
+}: {
+  when: Date;
+  confidence: string;
+  spaced: boolean;
+}) {
+  return (
+    <div style={{ marginTop: spaced ? 18 : 0, paddingTop: spaced ? 18 : 0, borderTop: spaced ? '1px solid var(--rule)' : 'none' }}>
+      <div className="eyebrow" style={{ color: 'var(--gold-deep)', marginBottom: 6 }}>
+        Next likely feed
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-serif)',
+          fontStyle: 'italic',
+          fontSize: 22,
+          lineHeight: 1.25,
+          color: 'var(--ink)',
+        }}
+      >
+        Usually around{' '}
+        <span style={{ fontStyle: 'normal', fontWeight: 500 }}>{formatClock(when)}</span>.
+      </div>
+      <div
+        style={{
+          fontFamily: 'var(--font-serif)',
+          fontStyle: 'italic',
+          fontSize: 14,
+          color: 'var(--ink-mute)',
+          marginTop: 4,
+          marginBottom: 10,
+        }}
+      >
+        {confidence}
+      </div>
+      <RemindMeButton
+        event={() => ({
+          kind: 'timed',
+          title: "Henri's next feed",
+          description: 'A gentle nudge for the next feeding window.',
+          startTime: when,
+          durationMinutes: 15,
+          alarmOffsetMinutes: 0,
+        })}
+      />
+    </div>
   );
 }
 
@@ -328,7 +437,50 @@ function mapFeedForCard(f: Feed): CardEntry {
   } else if (f.type === 'solid') {
     primary = 'A solid meal';
   }
-  return { when, primary, secondary: f.notes ?? undefined };
+
+  const nextInThreeHours = new Date(when.getTime() + 3 * 3600_000);
+  const footer = (
+    <RemindInThreeHoursLink
+      event={() => ({
+        kind: 'timed' as const,
+        title: "Henri's next feed",
+        description: 'A gentle three-hour nudge from the last feed.',
+        startTime: nextInThreeHours,
+        durationMinutes: 15,
+        alarmOffsetMinutes: 0,
+      })}
+    />
+  );
+
+  return { when, primary, secondary: f.notes ?? undefined, footer };
+}
+
+function RemindInThreeHoursLink({ event }: { event: () => CalendarEventInput }) {
+  const [added, setAdded] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        addToCalendar(event());
+        setAdded(true);
+        window.setTimeout(() => setAdded(false), 2200);
+      }}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        padding: 0,
+        fontFamily: 'var(--font-serif)',
+        fontStyle: 'italic',
+        fontSize: 14,
+        color: 'var(--gold-deep)',
+        textDecoration: 'underline',
+        textUnderlineOffset: 3,
+        cursor: 'pointer',
+      }}
+    >
+      {added ? 'Added to your calendar' : 'Remind me in 3 hours'}
+    </button>
+  );
 }
 
 function mapSleepForCard(s: SleepSession): CardEntry {

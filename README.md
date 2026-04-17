@@ -31,7 +31,7 @@ supabase/                SQL migrations + Edge Function source
   06_reminder_cron.sql   pg_cron schedule for the push-sender edge function
   functions/
     send-due-reminders/  dose-due web push sender
-    send-invitation/     invitation email sender (Resend)
+    counsel/             streaming chat proxy to Claude (chapter vi)
 
 netlify.toml             build + SPA routing + cache headers
 vite.config.ts           Vite + vite-plugin-pwa (manifest, workbox, push SW)
@@ -62,48 +62,15 @@ After the first deploy, go back to **Supabase → Authentication → URL Configu
 - Set **Site URL** to your Netlify URL (e.g. `https://henrirobert.netlify.app`)
 - Keep `http://localhost:5173/**` and add `https://henrirobert.netlify.app/**` in **Redirect URLs**
 
-## Web Push reminders (medications)
+## Medication & vaccine reminders
 
-The client subscription + service worker handler are done. You still need to:
+Each medication (next-dose) and each upcoming vaccine (due-at) has a small gold "Remind me" button. Tapping it builds a single-event `.ics` file on the fly and hands it to the device's calendar app — Apple Calendar on iOS, Google Calendar or the default on Android, Outlook/Apple Calendar on desktop. The phone owns the alarm from then on.
 
-1. **Generate VAPID keys:**
-   ```bash
-   npx web-push generate-vapid-keys
-   ```
-2. Paste the **public** key into:
-   - Local: `.env.local` as `VITE_VAPID_PUBLIC_KEY=...`
-   - Netlify env vars: `VITE_VAPID_PUBLIC_KEY`
+No VAPID keys, no push subscription, no service-worker push handler, no edge function to deploy. Works identically on iOS Safari, Android Chrome, and desktop.
 
-3. Paste both keys into **Supabase → Project Settings → Edge Functions → Secrets**:
-   - `VAPID_PUBLIC_KEY`
-   - `VAPID_PRIVATE_KEY`
-   - `VAPID_SUBJECT` (e.g. `mailto:you@example.com`)
+## Invitations
 
-4. Deploy the edge function:
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref <your-ref>
-   npx supabase functions deploy send-due-reminders
-   ```
-
-5. Schedule it: run `supabase/06_reminder_cron.sql` in the SQL editor (after setting the two GUCs at the top — see the comments in that file).
-
-**iOS caveat:** web push only works when the app is installed to the Home Screen. Settings shows a nudge to do this when relevant.
-
-## Invitation emails
-
-The invitations table and UI are working; an invitation creates a row and copies/shares the link. To send branded emails automatically, deploy the second edge function:
-
-1. Sign up at <https://resend.com> (free tier: 100 emails/day)
-2. Verify a sender domain or use the shared `onboarding@resend.dev` sender for testing
-3. **Supabase → Edge Functions → Secrets**:
-   - `RESEND_API_KEY`
-   - `FROM_EMAIL` (e.g. `Henri <henri@yourdomain.com>`)
-   - `APP_URL` (e.g. `https://henrirobert.netlify.app`)
-4. Deploy:
-   ```bash
-   npx supabase functions deploy send-invitation
-   ```
+The invitations table and UI create a private 30-day token link. There is no email step — the owner fills in name + relationship, clicks "Create invitation link," and the link is copied to their clipboard to text or message directly. Links always point to `https://henrirobert.netlify.app/accept/:token` regardless of the environment they were created in.
 
 ## Icons
 

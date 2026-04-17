@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
-import { FAB } from '../../components/FAB';
 import { Lightbox } from '../../components/Lightbox';
 import { PhotoGrid } from '../../components/PhotoGrid';
 import { PromptCard } from '../../components/PromptCard';
@@ -208,7 +208,11 @@ export function List() {
         </div>
       )}
 
-      <FAB onClick={() => nav('/memories/new?source=camera')} label="Add a memory" />
+      <div style={{ marginTop: 24 }}>
+        <Button size="lg" block onClick={() => nav('/memories/new')}>
+          Keep a new page
+        </Button>
+      </div>
 
       <Lightbox memory={open} onClose={() => setOpen(null)} />
     </div>

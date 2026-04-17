@@ -19,34 +19,27 @@ export async function listCaregivers(babyId: string): Promise<Caregiver[]> {
   return (data ?? []) as Caregiver[];
 }
 
+const EXPIRY_DAYS = 3;
+
 export async function createInvitation(
   babyId: string,
   inviterCaregiverId: string,
-  input: { email: string; relationship: string; display_name?: string | null }
+  input: { relationship: string; display_name?: string | null }
 ): Promise<Invitation> {
+  const expiresAt = new Date(Date.now() + EXPIRY_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from('invitations')
     .insert({
       baby_id: babyId,
       invited_by: inviterCaregiverId,
-      email: input.email.trim().toLowerCase(),
+      email: null,
       relationship: input.relationship,
       display_name: input.display_name?.trim() || null,
+      expires_at: expiresAt,
     })
     .select()
     .single();
   if (error) throw error;
-
-  // Best-effort: ask the edge function to send the email. If the function isn't
-  // deployed yet, the invitation row still exists and can be shared by link.
-  try {
-    await supabase.functions.invoke('send-invitation', {
-      body: { invitation_id: (data as Invitation).id },
-    });
-  } catch (e) {
-    console.warn('[henri] send-invitation edge function not available yet:', e);
-  }
-
   return data as Invitation;
 }
 
@@ -60,6 +53,12 @@ export async function revokeCaregiver(caregiverId: string): Promise<void> {
   if (error) throw error;
 }
 
+// The production site URL — used when generating invitation links regardless
+// of where the link is generated from (localhost dev, staging, etc.). Can be
+// overridden per-environment with VITE_APP_URL if needed.
+const PRODUCTION_APP_URL = 'https://henrirobert.netlify.app';
+
 export function invitationLink(token: string): string {
-  return `${window.location.origin}/accept/${token}`;
+  const base = (import.meta.env.VITE_APP_URL as string | undefined) ?? PRODUCTION_APP_URL;
+  return `${base.replace(/\/$/, '')}/accept/${token}`;
 }

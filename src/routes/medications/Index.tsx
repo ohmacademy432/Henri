@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Countdown } from '../../components/Countdown';
+import { RemindMeButton } from '../../components/RemindMeButton';
 import { SectionLabel } from '../../components/SectionLabel';
 import {
   listDoses,
@@ -15,7 +16,7 @@ import { useBook } from '../../lib/book';
 
 export function Index() {
   const nav = useNavigate();
-  const { baby, caregiver } = useBook();
+  const { baby } = useBook();
   const [meds, setMeds] = useState<Medication[]>([]);
   const [latestPerMed, setLatestPerMed] = useState<Map<string, Dose | null>>(new Map());
   const [recentLog, setRecentLog] = useState<Array<Dose & { medication: Medication | null }>>([]);
@@ -87,7 +88,6 @@ export function Index() {
           key={m.id}
           med={m}
           last={latestPerMed.get(m.id) ?? null}
-          caregiverName={caregiver?.display_name}
           onLogDose={() => nav(`/medications/${m.id}/dose`)}
           onOpen={() => nav(`/medications/${m.id}`)}
         />
@@ -171,13 +171,11 @@ export function Index() {
 function ActiveMedCard({
   med,
   last,
-  caregiverName,
   onLogDose,
   onOpen,
 }: {
   med: Medication;
   last: Dose | null;
-  caregiverName?: string;
   onLogDose: () => void;
   onOpen: () => void;
 }) {
@@ -266,21 +264,21 @@ function ActiveMedCard({
         )}
       </div>
 
-      <div
-        style={{
-          marginTop: 18,
-          background: 'var(--blush)',
-          color: 'var(--ink)',
-          borderRadius: 'var(--radius)',
-          padding: '12px 14px',
-          fontFamily: 'var(--font-serif)',
-          fontStyle: 'italic',
-          fontSize: 14,
-          lineHeight: 1.4,
-        }}
-      >
-        {caregiverName ?? 'You'} will be alerted when the next dose is due · web push · also pings any caregiver who opted in.
-      </div>
+      {state.nextSafe && !state.pastDue && (
+        <div style={{ marginTop: 14, position: 'relative' }}>
+          <RemindMeButton
+            onDark
+            event={() => ({
+              kind: 'timed',
+              title: `${med.name} is due`,
+              description: `Safe to give ${med.dose_amount} ${med.dose_unit} now.`,
+              startTime: state.nextSafe!,
+              durationMinutes: 15,
+              alarmOffsetMinutes: 0,
+            })}
+          />
+        </div>
+      )}
 
       <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
         <button

@@ -6,7 +6,6 @@ import { SectionLabel } from '../components/SectionLabel';
 import { useAuth } from '../lib/auth';
 import { useBook } from '../lib/book';
 import { supabase } from '../lib/supabase';
-import { isStandalone, pushSupport, subscribeToPush, unsubscribeFromPush } from '../lib/push';
 
 export function Settings() {
   const nav = useNavigate();
@@ -14,34 +13,6 @@ export function Settings() {
   const { baby, caregiver, refresh } = useBook();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  async function toggleNotifyMeds() {
-    if (!caregiver) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (caregiver.notify_meds) {
-        await unsubscribeFromPush(caregiver.id);
-      } else {
-        await subscribeToPush(caregiver.id);
-      }
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not change notifications.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const sup = pushSupport();
-  const standalone = isStandalone();
-  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const pushHint =
-    sup.state === 'unsupported'
-      ? "This browser doesn\u2019t support web notifications."
-      : isIos && !standalone
-      ? 'On iPhone, install Henri to your Home Screen first (Share \u2192 Add to Home Screen) so notifications can arrive when the app is closed.'
-      : null;
 
   async function toggleSaveGallery() {
     if (!caregiver) return;
@@ -125,27 +96,19 @@ export function Settings() {
       )}
 
       <SectionLabel>reminders</SectionLabel>
-      <Toggle
-        label="Notify me for medication doses"
-        on={!!caregiver?.notify_meds}
-        onToggle={toggleNotifyMeds}
-        disabled={busy || !caregiver || sup.state === 'unsupported'}
-      />
-      {pushHint && (
+      <Card tone="parchment">
         <div
-          className="caption"
           style={{
-            marginTop: 8,
-            color: 'var(--ink-soft)',
             fontFamily: 'var(--font-serif)',
             fontStyle: 'italic',
-            fontSize: 14,
-            lineHeight: 1.4,
+            fontSize: 16,
+            lineHeight: 1.6,
+            color: 'var(--ink-soft)',
           }}
         >
-          {pushHint}
+          Medication and vaccine reminders can be added to your phone's calendar with one tap from each dose. Your phone will alert you at the right time.
         </div>
-      )}
+      </Card>
 
       <SectionLabel>photos</SectionLabel>
       <Toggle

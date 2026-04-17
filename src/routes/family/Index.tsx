@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
-import { FAB } from '../../components/FAB';
 import { SectionLabel } from '../../components/SectionLabel';
 import { listFamily } from '../../lib/family';
 import { useBook } from '../../lib/book';
@@ -116,7 +116,13 @@ export function Index() {
         </>
       )}
 
-      <FAB onClick={() => nav('/family/new')} label="Add a family member" />
+      {members.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <Button size="lg" block onClick={() => nav('/family/new')}>
+            Add a family member
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

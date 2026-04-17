@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { RemindMeButton } from '../../components/RemindMeButton';
 import { SectionLabel } from '../../components/SectionLabel';
 import { fetchGrowth, fetchIllnesses, fetchVaccinations } from '../../lib/health';
 import { useBook } from '../../lib/book';
@@ -74,35 +75,52 @@ export function Index() {
               <div
                 key={v.id}
                 style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'space-between',
-                  gap: 12,
                   padding: '14px 0',
                   borderBottom: i === upcoming.length - 1 ? 'none' : '1px solid var(--rule)',
                 }}
               >
-                <span
+                <div
                   style={{
-                    fontFamily: 'var(--font-serif)',
-                    fontSize: 17,
-                    color: 'var(--ink)',
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    gap: 12,
                   }}
                 >
-                  {v.vaccine_name}
-                </span>
-                <span
-                  style={{
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: 11,
-                    letterSpacing: '0.16em',
-                    textTransform: 'uppercase',
-                    color: 'var(--gold-deep)',
-                    flexShrink: 0,
-                  }}
-                >
-                  {v.due_at ? `due ${formatShort(v.due_at)}` : 'on schedule'}
-                </span>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-serif)',
+                      fontSize: 17,
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {v.vaccine_name}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: 11,
+                      letterSpacing: '0.16em',
+                      textTransform: 'uppercase',
+                      color: 'var(--gold-deep)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {v.due_at ? `due ${formatShort(v.due_at)}` : 'on schedule'}
+                  </span>
+                </div>
+                {v.due_at && (
+                  <div style={{ marginTop: 8 }}>
+                    <RemindMeButton
+                      event={() => ({
+                        kind: 'all-day',
+                        title: `${v.vaccine_name} due`,
+                        description: `Scheduled vaccination for Henri.`,
+                        date: new Date(v.due_at!),
+                      })}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>

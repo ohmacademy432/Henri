@@ -7,10 +7,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'sw-push.js'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        importScripts: ['/sw-push.js'],
         navigateFallbackDenylist: [/^\/api/, /^\/accept/],
       },
       manifest: {

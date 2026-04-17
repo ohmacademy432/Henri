@@ -27,7 +27,7 @@ export type Caregiver = {
 export type Invitation = {
   id: string;
   baby_id: string;
-  email: string;
+  email: string | null;
   relationship: string | null;
   display_name: string | null;
   token: string;

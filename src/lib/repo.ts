@@ -45,6 +45,19 @@ export async function fetchSleepSessionsSince(
   return (data ?? []) as SleepSession[];
 }
 
+export async function fetchFeedsSince(
+  babyId: string,
+  sinceIso: string
+): Promise<Feed[]> {
+  const { data } = await supabase
+    .from('feeds')
+    .select('*')
+    .eq('baby_id', babyId)
+    .gte('started_at', sinceIso)
+    .order('started_at', { ascending: true });
+  return (data ?? []) as Feed[];
+}
+
 export type NewFeed = {
   type: Feed['type'];
   amount_ml?: number | null;

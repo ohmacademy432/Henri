@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Countdown } from '../../components/Countdown';
+import { RemindMeButton } from '../../components/RemindMeButton';
 import { SectionLabel } from '../../components/SectionLabel';
 import { fetchMedication, listDoses, nextSafeDose } from '../../lib/medications';
 import type { Dose, Medication } from '../../lib/types';
@@ -86,7 +87,7 @@ export function Detail() {
               last given {new Date(last.given_at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
             </div>
           )}
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <Button
               variant="gold"
               size="md"
@@ -94,6 +95,19 @@ export function Detail() {
             >
               Log a dose
             </Button>
+            {state.nextSafe && !state.pastDue && (
+              <RemindMeButton
+                onDark
+                event={() => ({
+                  kind: 'timed',
+                  title: `${med.name} is due`,
+                  description: `Safe to give ${med.dose_amount} ${med.dose_unit} now.`,
+                  startTime: state.nextSafe!,
+                  durationMinutes: 15,
+                  alarmOffsetMinutes: 0,
+                })}
+              />
+            )}
           </div>
         </Card>
       )}

@@ -73,35 +73,7 @@ export async function logDose(
     .select()
     .single();
   if (error) throw error;
-
-  // Schedule the next reminder. Best-effort — failures shouldn't block the dose log.
-  try {
-    await scheduleNextReminder(medicationId, input.given_at);
-  } catch (e) {
-    console.warn('[henri] Could not schedule next reminder:', e);
-  }
   return data as Dose;
-}
-
-export async function scheduleNextReminder(medicationId: string, givenAtIso: string): Promise<void> {
-  const med = await fetchMedication(medicationId);
-  if (!med || !med.active) return;
-
-  // Cancel any pending reminder for this medication.
-  await supabase
-    .from('reminders')
-    .update({ cancelled_at: new Date().toISOString() })
-    .eq('medication_id', medicationId)
-    .is('sent_at', null)
-    .is('cancelled_at', null);
-
-  const fireAt = new Date(new Date(givenAtIso).getTime() + med.frequency_hours * 3600_000);
-  await supabase.from('reminders').insert({
-    baby_id: med.baby_id,
-    medication_id: medicationId,
-    kind: 'med_due',
-    fire_at: fireAt.toISOString(),
-  });
 }
 
 export type CountdownState = {

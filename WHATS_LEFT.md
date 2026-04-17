@@ -1,137 +1,91 @@
-# What's left for you
+# Before the next Netlify deploy — production punch list
 
-Everything that needed your hands is here. Read top to bottom.
-
----
-
-## 1. Restart the dev server
-
-The Vite config changed (PWA plugin + icons). Stop `npm run dev` with **Ctrl-C**, then:
-
-```bash
-npm run dev
-```
-
-Then click through what's new:
-
-- `/today` — unchanged (the quiet pulse)
-- `/memories` — Today's prompt + suggested prompts list + the pages so far
-- `/health` — growth, vaccinations (auto-seeded), illness log, "Prepare a pediatric visit"
-- `/medications` — empty state invites you to add the first; if you add one, the dark card with live countdown shows up
-- `/family` — add Henri's people; Henri gets a gold avatar
-- `/print` — choose sections (cover, recent days, health, medications, memories, family) and print or save as PDF
-- `/invitations` — invite YahYah and anyone else; copy link if email isn't set up yet
-- Hamburger menu → Settings → Sign out, toggles, and birth-date add-later form
-- Hamburger menu → About this book
+Do these all in one sitting, right before we flip to "ready for Dana." Order doesn't matter within a group, but the groups should be done top-to-bottom.
 
 ---
 
-## 2. Run one more SQL migration
+## A. Netlify environment variables
 
-Paste `supabase/05_fix_seed_rls.sql` into the SQL editor if you haven't yet (you ran this earlier when we hit the RLS error — if Welcome worked, you've done it, skip this step).
+**Where:** Netlify dashboard → your `henri` site → Site configuration (left sidebar) → Environment variables → "Add a variable"
 
-Nothing else to run for core app function.
+Add these (values come from your local `.env.local`):
 
----
+- [ ] `VITE_SUPABASE_URL` = `https://yyhzfvwbaagisraicger.supabase.co`
+- [ ] `VITE_SUPABASE_ANON_KEY` = `sb_publishable_tpJfnAMr1K0TrQxX8GCyRQ__XDGqR20`
 
-## 3. Push the whole thing to GitHub + connect to Netlify
+## A2. Supabase SQL migrations to run *(required)*
 
-```bash
-git init
-git add .
-git commit -m "Initial Henri build"
-gh repo create henri --private --source=. --push
-```
+- [ ] In the Supabase SQL editor, run `supabase/09_invitation_3day_expiry.sql` — sets the 3-day default on `invitations.expires_at` and makes `invitations.email` nullable
+- [ ] (Optional) Verify Realtime is on for `invitations` and `caregivers` — Database → Replication → supabase_realtime publication should include both tables. Default on new projects is "all tables."
 
-Then on netlify.com:
+## B. Supabase URL config for production
 
-1. **Add new site → Import from Git** → select the `henri` repo
-2. Build settings auto-detect from `netlify.toml`
-3. **Site settings → Environment variables** — add two (for now):
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-4. Deploy
+**Where:** Supabase dashboard → `henri` project → Authentication (left sidebar) → URL Configuration
 
-After the first deploy, update **Supabase → Authentication → URL Configuration**:
+- [ ] **Site URL** field: change from `http://localhost:5173` to `https://henrirobert.netlify.app`
+- [ ] **Redirect URLs** list: add `https://henrirobert.netlify.app/**` (keep the localhost one too so you can still test locally)
 
-- **Site URL**: your Netlify URL (e.g. `https://henrirobert.netlify.app`)
-- **Redirect URLs**: add `https://henrirobert.netlify.app/**` (keep `http://localhost:5173/**` too)
+## C. Counsel (the AI companion) *(required to use chapter vi)*
 
----
+Without this, `/counsel` shows the UI but cannot actually send messages — the Edge Function will return an error.
 
-## 4. Turn on Web Push for medication reminders (optional but recommended)
+- [ ] In your Supabase dashboard → Project Settings → Edge Functions → Secrets, add:
+  - `ANTHROPIC_API_KEY` — the new key you generated (NOT the one you pasted in chat — revoke that if you haven't)
+- [ ] Run `supabase/07_counsel_schema.sql` in the Supabase SQL editor (creates the `counsel_chats` and `counsel_messages` tables with RLS)
+- [ ] Deploy the edge function:
+  ```bash
+  npx supabase login
+  npx supabase link --project-ref yyhzfvwbaagisraicger   # skip if already linked
+  npx supabase functions deploy counsel
+  ```
+- [ ] Try it locally: go to `/counsel`, pick a starter, send a message, watch a reply stream in
 
-1. Generate keys once:
-   ```bash
-   npx web-push generate-vapid-keys
-   ```
-2. Put the **public** key into:
-   - `.env.local` as `VITE_VAPID_PUBLIC_KEY=...`
-   - Netlify env vars as the same
-3. Put both keys into **Supabase → Project Settings → Edge Functions → Secrets**:
-   - `VAPID_PUBLIC_KEY`
-   - `VAPID_PRIVATE_KEY`
-   - `VAPID_SUBJECT` = `mailto:dana@example.com`
-4. Install the Supabase CLI if you haven't, then:
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref <your-ref>
-   npx supabase functions deploy send-due-reminders
-   ```
-5. Schedule it — open `supabase/06_reminder_cron.sql`, update the two `ALTER DATABASE` lines with your actual edge function URL and service role key, run it.
+## E. Placeholder icons *(anytime)*
 
-Now when a dose is logged, a reminder row is created. One minute after it comes due, every caregiver with `notify_meds = true` and a push subscription gets a notification.
+- [ ] Replace `public/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `apple-touch-icon.png` with real artwork (keep the filenames)
 
-**On your iPhone:** web push only works when the app is installed to Home Screen. Open the site in Safari → Share → Add to Home Screen. Then open from the Home Screen icon and go to Settings → "Notify me for medication doses" to subscribe.
+## F. Handover to Dana *(when you're ready to give her the app)*
 
----
+Two options — pick one. Either works.
 
-## 5. Turn on invitation emails (optional)
+**Option 1 — Start fresh (simplest):**
+- [ ] Dana creates her own account at the live site using her email
+- [ ] She walks through Welcome to create Henri's book
+- [ ] She invites you as YahYah
+- [ ] Your current test data stays as a separate book under your account
 
-The invitations screen already works — it creates an invitation row and gives you a "Copy invitation link" button so you can share manually via text or messenger. If you want branded emails sent automatically:
-
-1. Sign up at <https://resend.com> (free tier: 100/day, 3k/month)
-2. Get an API key; verify a sender domain or use `onboarding@resend.dev` for testing
-3. **Supabase → Edge Functions → Secrets**:
-   - `RESEND_API_KEY`
-   - `FROM_EMAIL` = `Henri <henri@yourdomain.com>` (or a resend.dev sender)
-   - `APP_URL` = your Netlify URL
-4. Deploy:
-   ```bash
-   npx supabase functions deploy send-invitation
-   ```
+**Option 2 — Transfer ownership (keeps what you've built):**
+- [ ] Dana creates an account at the live site (but skips Welcome / signs out before creating a baby)
+- [ ] Look up her `auth.users.id` in Supabase → Authentication → Users
+- [ ] In the SQL editor, run:
+  ```sql
+  update babies set owner_user_id = 'DANAS_USER_ID_HERE' where name = 'Henri';
+  insert into caregivers (baby_id, user_id, display_name, relationship, can_edit)
+    select id, 'DANAS_USER_ID_HERE', 'Dana', 'Mother', true from babies where name = 'Henri';
+  ```
+- [ ] Dana signs back in — the book is hers, you remain as YahYah
 
 ---
 
-## 6. Replace the placeholder icons (anytime)
-
-`public/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `apple-touch-icon.png` are generic placeholders — a cream "H" with a gold border. Drop in real artwork whenever you have it; keep the filenames.
-
----
-
-## What's genuinely done (no action needed)
+## What's already done (no action needed)
 
 - Authentication (magic link), invitation acceptance flow
 - Welcome flow with a "not yet — on the way" path for pregnancy
-- Today (greeting, last-recorded cards, prediction card, empty states for pregnancy)
-- Memory Book (list, new, detail, lightbox, visibility toggle, curated prompt suggestions)
-- Chapter iii — Health Record (growth, vaccinations list, illnesses, log sheets)
-- Chapter iv — Medications (list, detail, dose log, live countdown, reminder-row creation)
-- Chapter v — Family Tree (tiered avatars, Henri's gold-gradient avatar, member detail)
-- Invitations screen (owner-only sending, pending + active, revoke)
-- Settings (toggles, birth-date-add-later, sign out)
-- About page
-- **Universal print system** — pick any sections, any date range, save as PDF or print
+- Today screen with pregnancy state
+- Memory Book (prompts, suggested prompts, grid, lightbox, visibility toggle)
+- Health Record (growth, vaccinations list, illnesses)
+- Medications (list, detail, dose log, live countdown, reminder-row creation)
+- Family Tree (tiered avatars, Henri's gold-gradient avatar)
+- Invitations screen
+- Settings, About
+- Universal print system
 - RLS on every table; storage policies scope photos by baby_id
-- Service worker push handler (`public/sw-push.js`) wired through vite-plugin-pwa
+- Service worker push handler wired through vite-plugin-pwa
 - Edge Function source for push sender + invitation email sender
 - CDC vaccine schedule + 80+ prompts auto-seeded per baby
-- `netlify.toml`, `.gitignore` correctly excluding `.env.local`
+- `netlify.toml`, `.gitignore`, `.npmrc` (for Netlify's strict npm install)
+- First GitHub commit, Netlify auto-deploy live at https://henrirobert.netlify.app
 
-## Things I left as clear TODOs (mentioned above)
+## Still to build (if you want them)
 
-- VAPID keys (you generate, deployment)
-- Edge Function deployments (both)
-- Production Supabase Site URL swap
-- Real icons when you have them
-- Audio capsules (voice notes) — the schema + storage bucket exist but the recorder UI isn't built yet. The "Voice" filter chip in the Memory Book is ready to light up as soon as we build it. Tell me when you want this.
+- Audio capsules (voice notes) — the schema + storage bucket + "Voice" filter chip exist; the MediaRecorder recorder UI isn't built yet. Tell me when you want it.

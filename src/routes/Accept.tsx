@@ -10,7 +10,6 @@ import { useBook } from '../lib/book';
 type Invite = {
   id: string;
   baby_id: string;
-  email: string;
   display_name: string | null;
   relationship: string | null;
   accepted: boolean;
@@ -25,7 +24,7 @@ export function Accept() {
 
   const [invite, setInvite] = useState<Invite | null>(null);
   const [state, setState] = useState<
-    'loading' | 'need_signin' | 'email_mismatch' | 'expired' | 'ready' | 'accepted' | 'not_found'
+    'loading' | 'need_signin' | 'expired' | 'ready' | 'accepted' | 'not_found'
   >('loading');
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
@@ -40,7 +39,7 @@ export function Accept() {
     (async () => {
       const { data, error } = await supabase
         .from('invitations')
-        .select('id, baby_id, email, display_name, relationship, accepted, expires_at')
+        .select('id, baby_id, display_name, relationship, accepted, expires_at')
         .eq('token', token)
         .maybeSingle();
       if (error || !data) {
@@ -57,14 +56,10 @@ export function Accept() {
         return;
       }
       if (!session) {
-        setEmail(data.email);
         setState('need_signin');
         return;
       }
-      if ((user?.email ?? '').toLowerCase() !== data.email.toLowerCase()) {
-        setState('email_mismatch');
-        return;
-      }
+      // Token alone is the capability — any signed-in email can accept.
       setState('ready');
     })();
   }, [token, session, user]);
@@ -121,7 +116,7 @@ export function Accept() {
       {state === 'expired' && (
         <Message
           title="This invitation has expired."
-          body="Ask the owner to send you a fresh one — invitations are good for thirty days."
+          body="Ask the owner to send you a fresh one — invitations are good for three days."
         />
       )}
 
@@ -130,14 +125,6 @@ export function Accept() {
           title="You've already opened this invitation."
           body="Sign in and the book will be waiting."
           cta={{ label: 'Go to the book', onClick: () => nav('/today') }}
-        />
-      )}
-
-      {state === 'email_mismatch' && (
-        <Message
-          title="This invitation is for a different email."
-          body={`The invite was sent to ${invite?.email}. You are signed in as ${user?.email}.`}
-          cta={{ label: 'Sign out', onClick: async () => { await supabase.auth.signOut(); nav(`/accept/${token}`); } }}
         />
       )}
 
@@ -164,6 +151,7 @@ export function Accept() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
             style={{
               width: '100%',
               padding: '12px 2px',

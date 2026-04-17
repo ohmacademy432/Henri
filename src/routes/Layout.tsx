@@ -1,11 +1,12 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { TopBar } from '../components/TopBar';
+import { useMenu } from '../lib/menu';
 
 export function Layout() {
-  const nav = useNavigate();
+  const { open } = useMenu();
   return (
     <div className="app-shell">
-      <TopBar onMenu={() => nav('/menu')} />
+      <TopBar onMenu={open} />
       <Outlet />
     </div>
   );
