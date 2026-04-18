@@ -37,21 +37,20 @@ export function Accept() {
       return;
     }
     (async () => {
-      const { data, error } = await supabase
-        .from('invitations')
-        .select('id, baby_id, display_name, relationship, accepted, expires_at')
-        .eq('token', token)
-        .maybeSingle();
-      if (error || !data) {
+      // RPC goes through a SECURITY DEFINER function so the invitee can
+      // read their own invitation even before they're a caregiver.
+      const { data, error } = await supabase.rpc('invitation_by_token', { _token: token });
+      const row = Array.isArray(data) ? data[0] : null;
+      if (error || !row) {
         setState('not_found');
         return;
       }
-      setInvite(data as Invite);
-      if (data.accepted) {
+      setInvite(row as Invite);
+      if (row.accepted) {
         setState('accepted');
         return;
       }
-      if (new Date(data.expires_at).getTime() < Date.now()) {
+      if (new Date(row.expires_at).getTime() < Date.now()) {
         setState('expired');
         return;
       }

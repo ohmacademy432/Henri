@@ -16,6 +16,7 @@ Add these (values come from your local `.env.local`):
 ## A2. Supabase SQL migrations to run *(required)*
 
 - [ ] In the Supabase SQL editor, run `supabase/09_invitation_3day_expiry.sql` — sets the 3-day default on `invitations.expires_at` and makes `invitations.email` nullable
+- [ ] Run `supabase/11_invitation_rls_fix.sql` — creates the `invitation_by_token` RPC so invitees can read their own invitation. **Without this, every invitation link shows "invitation could not be found."**
 - [ ] (Optional) Verify Realtime is on for `invitations` and `caregivers` — Database → Replication → supabase_realtime publication should include both tables. Default on new projects is "all tables."
 
 ## B. Supabase URL config for production
