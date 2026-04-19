@@ -7,7 +7,8 @@ type AuthState = {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  signInWithEmail: (email: string, redirectTo?: string) => Promise<void>;
+  sendEmailOtp: (email: string) => Promise<void>;
+  verifyEmailOtp: (email: string, token: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -33,12 +34,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       user: session?.user ?? null,
       loading,
-      signInWithEmail: async (email, redirectTo) => {
-        const emailRedirectTo =
-          redirectTo ?? `${window.location.origin}/today`;
+      // Omitting emailRedirectTo makes Supabase send a 6-digit OTP code
+      // instead of a magic link — the user stays inside the PWA.
+      sendEmailOtp: async (email) => {
         const { error } = await supabase.auth.signInWithOtp({
           email,
-          options: { emailRedirectTo, shouldCreateUser: true },
+          options: { shouldCreateUser: true },
+        });
+        if (error) throw error;
+      },
+      verifyEmailOtp: async (email, token) => {
+        const { error } = await supabase.auth.verifyOtp({
+          email,
+          token,
+          type: 'email',
         });
         if (error) throw error;
       },

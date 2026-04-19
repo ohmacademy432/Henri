@@ -19,7 +19,7 @@ type Invite = {
 export function Accept() {
   const { token } = useParams<{ token: string }>();
   const nav = useNavigate();
-  const { user, session, signInWithEmail } = useAuth();
+  const { user, session, sendEmailOtp, verifyEmailOtp } = useAuth();
   const { refresh } = useBook();
 
   const [invite, setInvite] = useState<Invite | null>(null);
@@ -28,7 +28,8 @@ export function Accept() {
   >('loading');
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
+  const [signInStep, setSignInStep] = useState<'email' | 'code'>('email');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -87,15 +88,32 @@ export function Accept() {
     nav('/today');
   }
 
-  async function handleSignIn(e: FormEvent) {
+  async function onRequestCode(e: FormEvent) {
     e.preventDefault();
+    if (!email) return;
     setError(null);
     setBusy(true);
     try {
-      await signInWithEmail(email.trim(), `${window.location.origin}/accept/${token}`);
-      setSent(true);
+      await sendEmailOtp(email.trim());
+      setSignInStep('code');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onVerifyCode(e: FormEvent) {
+    e.preventDefault();
+    const t = code.trim();
+    if (t.length < 6) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await verifyEmailOtp(email.trim(), t);
+      // onAuthStateChange will update session, which flips state to 'ready'.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That code didn’t work. Try again.');
     } finally {
       setBusy(false);
     }
@@ -127,8 +145,8 @@ export function Accept() {
         />
       )}
 
-      {state === 'need_signin' && !sent && (
-        <form onSubmit={handleSignIn}>
+      {state === 'need_signin' && signInStep === 'email' && (
+        <form onSubmit={onRequestCode}>
           <div
             style={{
               fontFamily: 'var(--font-serif)',
@@ -169,16 +187,83 @@ export function Accept() {
             </div>
           )}
           <Button type="submit" variant="primary" size="lg" block disabled={busy}>
-            {busy ? 'Sending…' : 'Send me a sign-in link'}
+            {busy ? 'Sending…' : 'Send me a code'}
           </Button>
         </form>
       )}
 
-      {state === 'need_signin' && sent && (
-        <Message
-          title="Check your email."
-          body="Open the link from your phone and you'll come straight back here."
-        />
+      {state === 'need_signin' && signInStep === 'code' && (
+        <form onSubmit={onVerifyCode}>
+          <div
+            style={{
+              fontFamily: 'var(--font-serif)',
+              fontStyle: 'italic',
+              fontSize: 18,
+              lineHeight: 1.5,
+              color: 'var(--ink-soft)',
+              marginBottom: 24,
+            }}
+          >
+            We sent a six-digit code to
+            <br />
+            <span style={{ color: 'var(--ink)', fontStyle: 'normal' }}>{email}</span>.
+          </div>
+          <label className="eyebrow" style={{ display: 'block', marginBottom: 8 }}>
+            Your code
+          </label>
+          <input
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]*"
+            maxLength={6}
+            required
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="123456"
+            style={{
+              width: '100%',
+              padding: '12px 2px',
+              border: 'none',
+              borderBottom: '1px solid var(--gold-light)',
+              background: 'transparent',
+              fontFamily: 'var(--font-serif)',
+              fontSize: 28,
+              letterSpacing: '0.4em',
+              textAlign: 'center',
+              outline: 'none',
+              marginBottom: 24,
+            }}
+          />
+          {error && (
+            <div className="caption" style={{ color: 'var(--gold-deep)', marginBottom: 14 }}>
+              {error}
+            </div>
+          )}
+          <Button type="submit" variant="primary" size="lg" block disabled={busy}>
+            {busy ? 'Opening…' : 'Continue'}
+          </Button>
+          <button
+            type="button"
+            onClick={() => {
+              setSignInStep('email');
+              setCode('');
+              setError(null);
+            }}
+            style={{
+              marginTop: 18,
+              background: 'none',
+              border: 'none',
+              fontFamily: 'var(--font-serif)',
+              fontStyle: 'italic',
+              fontSize: 15,
+              color: 'var(--ink-mute)',
+              cursor: 'pointer',
+            }}
+          >
+            Use a different email
+          </button>
+        </form>
       )}
 
       {state === 'ready' && (

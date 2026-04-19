@@ -16,6 +16,8 @@ export const supabase = createClient(url ?? 'http://placeholder', key ?? 'placeh
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    storage: window.localStorage,
+    flowType: 'pkce',
   },
 });
 
