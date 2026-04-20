@@ -7,8 +7,8 @@ type AuthState = {
   session: Session | null;
   user: User | null;
   loading: boolean;
-  sendEmailOtp: (email: string) => Promise<void>;
-  verifyEmailOtp: (email: string, token: string) => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -34,21 +34,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       user: session?.user ?? null,
       loading,
-      // Omitting emailRedirectTo makes Supabase send a 6-digit OTP code
-      // instead of a magic link — the user stays inside the PWA.
-      sendEmailOtp: async (email) => {
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: { shouldCreateUser: true },
-        });
+      signInWithPassword: async (email, password) => {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       },
-      verifyEmailOtp: async (email, token) => {
-        const { error } = await supabase.auth.verifyOtp({
-          email,
-          token,
-          type: 'email',
-        });
+      signUp: async (email, password) => {
+        // Email confirmations are disabled in the Supabase dashboard, so this
+        // call returns an active session and the user is signed in immediately.
+        const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
       },
       signOut: async () => {

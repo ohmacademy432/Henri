@@ -16,10 +16,12 @@ type Invite = {
   expires_at: string;
 };
 
+type FormMode = 'signup' | 'signin';
+
 export function Accept() {
   const { token } = useParams<{ token: string }>();
   const nav = useNavigate();
-  const { user, session, sendEmailOtp, verifyEmailOtp } = useAuth();
+  const { user, session, signInWithPassword, signUp } = useAuth();
   const { refresh } = useBook();
 
   const [invite, setInvite] = useState<Invite | null>(null);
@@ -27,9 +29,10 @@ export function Accept() {
     'loading' | 'need_signin' | 'expired' | 'ready' | 'accepted' | 'not_found'
   >('loading');
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<FormMode>('signup');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [signInStep, setSignInStep] = useState<'email' | 'code'>('email');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -64,60 +67,101 @@ export function Accept() {
     })();
   }, [token, session, user]);
 
-  async function acceptInvite() {
-    if (!invite || !user) return;
-    setBusy(true);
+  function switchMode(next: FormMode) {
+    setMode(next);
     setError(null);
+    setPassword('');
+    setConfirm('');
+  }
+
+  function humanError(raw: unknown): string {
+    const msg = raw instanceof Error ? raw.message : String(raw);
+    const lower = msg.toLowerCase();
+    if (lower.includes('invalid login credentials')) {
+      return 'That email and password don’t match.';
+    }
+    if (lower.includes('user already registered') || lower.includes('already been registered')) {
+      return 'An account with that email already exists — sign in instead.';
+    }
+    if (lower.includes('password') && lower.includes('6')) {
+      return 'Password must be at least 6 characters.';
+    }
+    if (lower.includes('email') && lower.includes('valid')) {
+      return 'That doesn’t look like a valid email.';
+    }
+    return msg || 'Something went wrong.';
+  }
+
+  async function linkCaregiverAndGo(userId: string, userEmail: string | null) {
+    if (!invite) return;
     const { error: careErr } = await supabase.from('caregivers').insert({
       baby_id: invite.baby_id,
-      user_id: user.id,
-      display_name: invite.display_name ?? user.email?.split('@')[0] ?? 'Reader',
+      user_id: userId,
+      display_name: invite.display_name ?? userEmail?.split('@')[0] ?? 'Reader',
       relationship: invite.relationship,
     });
-    if (careErr && !careErr.message.includes('duplicate')) {
-      setError(careErr.message);
-      setBusy(false);
-      return;
+    if (careErr && !careErr.message.toLowerCase().includes('duplicate')) {
+      throw careErr;
     }
     await supabase
       .from('invitations')
       .update({ accepted: true, accepted_at: new Date().toISOString() })
       .eq('id', invite.id);
     await refresh();
-    setBusy(false);
     nav('/today');
   }
 
-  async function onRequestCode(e: FormEvent) {
-    e.preventDefault();
-    if (!email) return;
-    setError(null);
+  async function acceptInvite() {
+    if (!invite || !user) return;
     setBusy(true);
+    setError(null);
     try {
-      await sendEmailOtp(email.trim());
-      setSignInStep('code');
+      await linkCaregiverAndGo(user.id, user.email ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
-    } finally {
+      setError(err instanceof Error ? err.message : 'Could not open the book.');
       setBusy(false);
     }
   }
 
-  async function onVerifyCode(e: FormEvent) {
+  async function onSubmitAuth(e: FormEvent) {
     e.preventDefault();
-    const t = code.trim();
-    if (t.length < 6) return;
     setError(null);
+    const e1 = email.trim();
+    if (!e1 || !password) return;
+    if (mode === 'signup' && password !== confirm) {
+      setError('Passwords don’t match.');
+      return;
+    }
     setBusy(true);
     try {
-      await verifyEmailOtp(email.trim(), t);
-      // onAuthStateChange will update session, which flips state to 'ready'.
+      if (mode === 'signup') {
+        await signUp(e1, password);
+      } else {
+        await signInWithPassword(e1, password);
+      }
+      // Grab the fresh session directly so we don't race React state updates
+      // from onAuthStateChange before linking the caregiver row.
+      const { data: sessData } = await supabase.auth.getSession();
+      const u = sessData.session?.user;
+      if (!u) throw new Error('Signed in, but no session was returned.');
+      await linkCaregiverAndGo(u.id, u.email ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'That code didn’t work. Try again.');
-    } finally {
+      setError(humanError(err));
       setBusy(false);
     }
   }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px 2px',
+    border: 'none',
+    borderBottom: '1px solid var(--gold-light)',
+    background: 'transparent',
+    fontFamily: 'var(--font-serif)',
+    fontSize: 20,
+    outline: 'none',
+    marginBottom: 22,
+  } as const;
 
   return (
     <Shell>
@@ -145,113 +189,95 @@ export function Accept() {
         />
       )}
 
-      {state === 'need_signin' && signInStep === 'email' && (
-        <form onSubmit={onRequestCode}>
+      {state === 'need_signin' && (
+        <form onSubmit={onSubmitAuth}>
           <div
             style={{
               fontFamily: 'var(--font-serif)',
-              fontSize: 24,
-              lineHeight: 1.3,
+              fontSize: 22,
+              lineHeight: 1.35,
               color: 'var(--ink)',
-              marginBottom: 18,
+              marginBottom: 22,
+              textAlign: 'left',
             }}
           >
             You've been invited to read
             <br />
             <span style={{ fontStyle: 'italic' }}>a book kept for a child.</span>
           </div>
-          <label className="eyebrow" style={{ display: 'block', marginBottom: 8 }}>
+
+          <label
+            className="eyebrow"
+            style={{ display: 'block', textAlign: 'left', marginBottom: 8 }}
+          >
             Your email
           </label>
           <input
             type="email"
+            autoComplete="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            style={{
-              width: '100%',
-              padding: '12px 2px',
-              border: 'none',
-              borderBottom: '1px solid var(--gold-light)',
-              background: 'transparent',
-              fontFamily: 'var(--font-serif)',
-              fontSize: 20,
-              outline: 'none',
-              marginBottom: 24,
-            }}
+            style={inputStyle}
           />
-          {error && (
-            <div className="caption" style={{ color: 'var(--gold-deep)', marginBottom: 14 }}>
-              {error}
-            </div>
-          )}
-          <Button type="submit" variant="primary" size="lg" block disabled={busy}>
-            {busy ? 'Sending…' : 'Send me a code'}
-          </Button>
-        </form>
-      )}
 
-      {state === 'need_signin' && signInStep === 'code' && (
-        <form onSubmit={onVerifyCode}>
-          <div
-            style={{
-              fontFamily: 'var(--font-serif)',
-              fontStyle: 'italic',
-              fontSize: 18,
-              lineHeight: 1.5,
-              color: 'var(--ink-soft)',
-              marginBottom: 24,
-            }}
+          <label
+            className="eyebrow"
+            style={{ display: 'block', textAlign: 'left', marginBottom: 8 }}
           >
-            We sent a six-digit code to
-            <br />
-            <span style={{ color: 'var(--ink)', fontStyle: 'normal' }}>{email}</span>.
-          </div>
-          <label className="eyebrow" style={{ display: 'block', marginBottom: 8 }}>
-            Your code
+            {mode === 'signup' ? 'Choose a password' : 'Password'}
           </label>
           <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]*"
-            maxLength={6}
+            type="password"
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
             required
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-            placeholder="123456"
-            style={{
-              width: '100%',
-              padding: '12px 2px',
-              border: 'none',
-              borderBottom: '1px solid var(--gold-light)',
-              background: 'transparent',
-              fontFamily: 'var(--font-serif)',
-              fontSize: 28,
-              letterSpacing: '0.4em',
-              textAlign: 'center',
-              outline: 'none',
-              marginBottom: 24,
-            }}
+            minLength={6}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={mode === 'signup' ? 'at least 6 characters' : ''}
+            style={inputStyle}
           />
+
+          {mode === 'signup' && (
+            <>
+              <label
+                className="eyebrow"
+                style={{ display: 'block', textAlign: 'left', marginBottom: 8 }}
+              >
+                Confirm password
+              </label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                required
+                minLength={6}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                style={inputStyle}
+              />
+            </>
+          )}
+
           {error && (
             <div className="caption" style={{ color: 'var(--gold-deep)', marginBottom: 14 }}>
               {error}
             </div>
           )}
+
           <Button type="submit" variant="primary" size="lg" block disabled={busy}>
-            {busy ? 'Opening…' : 'Continue'}
+            {busy
+              ? 'Opening…'
+              : mode === 'signup'
+                ? `Join ${invite?.display_name ? invite.display_name + '’s' : 'Henri’s'} book`
+                : 'Sign in and accept'}
           </Button>
+
           <button
             type="button"
-            onClick={() => {
-              setSignInStep('email');
-              setCode('');
-              setError(null);
-            }}
+            onClick={() => switchMode(mode === 'signup' ? 'signin' : 'signup')}
             style={{
-              marginTop: 18,
+              marginTop: 20,
               background: 'none',
               border: 'none',
               fontFamily: 'var(--font-serif)',
@@ -261,7 +287,9 @@ export function Accept() {
               cursor: 'pointer',
             }}
           >
-            Use a different email
+            {mode === 'signup'
+              ? 'I already have an account — sign in instead'
+              : 'Create a new account instead'}
           </button>
         </form>
       )}
