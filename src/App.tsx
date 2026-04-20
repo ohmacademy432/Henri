@@ -4,6 +4,7 @@ import { BookProvider } from './lib/book';
 import { MenuProvider } from './lib/menu';
 import { MenuOverlay } from './components/MenuOverlay';
 import { Login } from './routes/Login';
+import { ResetPassword } from './routes/ResetPassword';
 import { Accept } from './routes/Accept';
 import { Welcome } from './routes/Welcome';
 import { Layout } from './routes/Layout';
@@ -37,6 +38,7 @@ export default function App() {
           <MenuProvider>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/accept/:token" element={<Accept />} />
 
               <Route element={<RequireAuth />}>

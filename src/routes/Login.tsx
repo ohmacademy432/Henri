@@ -6,7 +6,7 @@ import { Button } from '../components/Button';
 import { useAuth } from '../lib/auth';
 import { isSupabaseConfigured } from '../lib/supabase';
 
-type Mode = 'signin' | 'signup';
+type Mode = 'signin' | 'signup' | 'forgot';
 
 export function Login() {
   const [mode, setMode] = useState<Mode>('signin');
@@ -15,7 +15,8 @@ export function Login() {
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { signInWithPassword, signUp } = useAuth();
+  const [resetSent, setResetSent] = useState(false);
+  const { signInWithPassword, signUp, sendPasswordReset } = useAuth();
   const { state } = useLocation();
   const nav = useNavigate();
 
@@ -24,6 +25,7 @@ export function Login() {
     setError(null);
     setPassword('');
     setConfirm('');
+    setResetSent(false);
   }
 
   function humanError(raw: unknown): string {
@@ -56,7 +58,22 @@ export function Login() {
     }
 
     const e1 = email.trim();
-    if (!e1 || !password) return;
+    if (!e1) return;
+
+    if (mode === 'forgot') {
+      setBusy(true);
+      try {
+        await sendPasswordReset(e1);
+        setResetSent(true);
+      } catch (err) {
+        setError(humanError(err));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (!password) return;
 
     if (mode === 'signup' && password !== confirm) {
       setError('Passwords don’t match.');
@@ -141,24 +158,28 @@ export function Login() {
             style={inputStyle}
           />
 
-          <label
-            htmlFor="password"
-            className="eyebrow"
-            style={{ display: 'block', textAlign: 'left', marginBottom: 8 }}
-          >
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-            required
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={mode === 'signup' ? 'at least 6 characters' : ''}
-            style={inputStyle}
-          />
+          {mode !== 'forgot' && (
+            <>
+              <label
+                htmlFor="password"
+                className="eyebrow"
+                style={{ display: 'block', textAlign: 'left', marginBottom: 8 }}
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === 'signup' ? 'at least 6 characters' : ''}
+                style={inputStyle}
+              />
+            </>
+          )}
 
           {mode === 'signup' && (
             <>
@@ -182,6 +203,23 @@ export function Login() {
             </>
           )}
 
+          {mode === 'forgot' && resetSent && (
+            <div
+              style={{
+                fontFamily: 'var(--font-serif)',
+                fontStyle: 'italic',
+                color: 'var(--ink-soft)',
+                marginBottom: 16,
+                fontSize: 16,
+                lineHeight: 1.5,
+              }}
+            >
+              We've sent a link to <span style={{ color: 'var(--ink)' }}>{email}</span>.
+              <br />
+              Open it to choose a new password.
+            </div>
+          )}
+
           {error && (
             <div
               style={{
@@ -197,21 +235,52 @@ export function Login() {
             </div>
           )}
 
-          <Button type="submit" variant="primary" size="lg" block disabled={busy}>
-            {busy
-              ? mode === 'signin'
-                ? 'Signing in…'
-                : 'Creating…'
-              : mode === 'signin'
-                ? 'Sign in'
-                : 'Create account'}
-          </Button>
+          {!(mode === 'forgot' && resetSent) && (
+            <Button type="submit" variant="primary" size="lg" block disabled={busy}>
+              {busy
+                ? mode === 'signin'
+                  ? 'Signing in…'
+                  : mode === 'signup'
+                    ? 'Creating…'
+                    : 'Sending…'
+                : mode === 'signin'
+                  ? 'Sign in'
+                  : mode === 'signup'
+                    ? 'Create account'
+                    : 'Send reset link'}
+            </Button>
+          )}
+
+          {mode === 'signin' && (
+            <button
+              type="button"
+              onClick={() => switchMode('forgot')}
+              style={{
+                marginTop: 16,
+                background: 'none',
+                border: 'none',
+                fontFamily: 'var(--font-serif)',
+                fontStyle: 'italic',
+                fontSize: 14,
+                color: 'var(--ink-mute)',
+                cursor: 'pointer',
+                display: 'block',
+                width: '100%',
+              }}
+            >
+              Forgot password?
+            </button>
+          )}
 
           <button
             type="button"
-            onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}
+            onClick={() =>
+              switchMode(
+                mode === 'signin' ? 'signup' : mode === 'signup' ? 'signin' : 'signin'
+              )
+            }
             style={{
-              marginTop: 22,
+              marginTop: mode === 'signin' ? 8 : 22,
               background: 'none',
               border: 'none',
               fontFamily: 'var(--font-serif)',
@@ -221,7 +290,11 @@ export function Login() {
               cursor: 'pointer',
             }}
           >
-            {mode === 'signin' ? 'Create an account' : 'I already have an account'}
+            {mode === 'signin'
+              ? 'Create an account'
+              : mode === 'signup'
+                ? 'I already have an account'
+                : 'Back to sign in'}
           </button>
         </form>
       </div>
